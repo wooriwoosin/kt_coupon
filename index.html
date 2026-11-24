@@ -270,6 +270,10 @@ function isCandidateRow(r){
 function isTVProduct(name){ name=name||''; return name.includes('TV') || name.includes('티_업셀링'); }
 function isInetProduct(name){ name=name||''; return name.includes('인터넷') || name.includes('인_업셀링'); }
 
+// 가입.번호 구분자: 슬래시(/)뿐 아니라 공백·줄바꿈·쉼표·파이프로만 나뉘어 있어도 각각 분리
+function splitSaidParts(s){
+  return String(s||'').split(/[\/\s,|]+/).filter(Boolean);
+}
 function isPhonePart(p){
   // 접속번호(지역번호-국번-번호)는 대시/점 구분자를 항상 포함 (031-xxx-xxxx, 042.0024.7842, 04232-7748 등).
   // 진짜 SAID/서비스번호는 항상 구분자 없는 순수 숫자열이므로, 구분자 유무로 판별한다.
@@ -290,7 +294,7 @@ function analyzeGroupNumbers(rows){
     const s = r['가입.번호']||'';
     const re=/z!(\d+)/g; let m;
     while((m=re.exec(s))) zTagged.add(m[1]);
-    s.split('/').forEach(p=>{
+    splitSaidParts(s).forEach(p=>{
       const d = digitsInPart(p);
       if(d){ if(!occ.has(d)) occ.set(d, new Set()); occ.get(d).add(idx); }
     });
@@ -300,7 +304,7 @@ function analyzeGroupNumbers(rows){
   return { shared, zTagged };
 }
 function extractTVSaidCandidates(said, shared){
-  const parts = (said||'').split('/');
+  const parts = splitSaidParts(said);
   const cands = [];
   parts.forEach(p=>{
     const d = digitsInPart(p);
