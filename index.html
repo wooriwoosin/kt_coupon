@@ -55,6 +55,10 @@
   #dropZone.drag{border-color:var(--accent);background:var(--accent-soft);}
   .fileinfo{font-size:12px;color:var(--muted);margin-top:8px;}
   .footer-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}
+  .table-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+  button.danger{background:#fff;color:var(--err-text);border:1px solid var(--err-border);}
+  button.danger:disabled{background:#f2f3f5;color:#b0b4bc;border:1px solid var(--border);}
+  #deletedCard tbody tr{background:#f7f7f8;color:var(--muted);}
 </style>
 </head>
 <body>
@@ -90,12 +94,16 @@
 
   <div class="card hidden" id="tableCard">
     <h2>3. 등록 대상 목록 (그룹: 고객명+유치자 기준)</h2>
+    <div class="table-actions">
+      <button id="btnDeleteChecked" class="danger" disabled>선택 삭제</button>
+      <span class="muted" id="checkedInfo"></span>
+    </div>
     <div class="tablewrap">
       <table>
         <thead>
           <tr>
             <th>No</th>
-            <th>확인</th>
+            <th class="checkbox-cell">확인<br><input type="checkbox" id="checkAll" title="전체 선택"></th>
             <th class="sortable" data-sort="name">고객명</th>
             <th class="sortable" data-sort="agent">유치자</th>
             <th class="sortable" data-sort="team">협력점/부서</th>
@@ -110,6 +118,31 @@
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card hidden" id="deletedCard">
+    <h2>삭제 목록 (<span id="deletedCount">0</span>건) — 다운로드 파일에서 제외됩니다</h2>
+    <div class="table-actions">
+      <button id="btnRestore" class="secondary" disabled>선택 다시 추가</button>
+      <span class="muted">체크 후 "다시 추가"를 누르면 등록 대상 목록으로 돌아갑니다.</span>
+    </div>
+    <div class="tablewrap" style="max-height:320px;">
+      <table>
+        <thead>
+          <tr>
+            <th class="checkbox-cell">선택<br><input type="checkbox" id="restoreAll" title="전체 선택"></th>
+            <th>고객명</th>
+            <th>유치자</th>
+            <th>협력점/부서</th>
+            <th>개통일</th>
+            <th>상품구성</th>
+            <th>총금액</th>
+            <th>오류</th>
+          </tr>
+        </thead>
+        <tbody id="deletedTbody"></tbody>
       </table>
     </div>
   </div>
@@ -364,7 +397,9 @@ function buildGroups(rows){
       noProductError,
       rows: grpRows,
       overrides: {},
-      checked: false
+      checked: false,
+      deleted: false,
+      restoreChecked: false
     });
   });
   groups.sort((a,b)=> (a.개통일||'').localeCompare(b.개통일||'') || a.고객명.localeCompare(b.고객명));
@@ -433,8 +468,9 @@ function sortValue(g, col){
     default: return '';
   }
 }
+function activeGroups(){ return GROUPS.filter(g=>!g.deleted); }
 function getSortedIndices(){
-  const idxs = GROUPS.map((_,i)=>i);
+  const idxs = GROUPS.map((_,i)=>i).filter(i=>!GROUPS[i].deleted);
   if(!sortState.col) return idxs;
   idxs.sort((ia,ib)=>{
     const va = sortValue(GROUPS[ia], sortState.col);
@@ -454,6 +490,7 @@ function render(){
   let okCount=0, errCount=0, techCount=0;
 
   const order = getSortedIndices();
+  const deletedIdx = GROUPS.map((_,i)=>i).filter(i=>GROUPS[i].deleted);
 
   order.forEach((idx, displayNo)=>{
     const g = GROUPS[idx];
@@ -494,11 +531,45 @@ function render(){
   });
 
   document.getElementById('summaryPills').innerHTML = `
-    <span class="pill">전체 ${GROUPS.length}건</span>
+    <span class="pill">전체 ${order.length}건</span>
     <span class="pill ok">정상 ${okCount}건</span>
     <span class="pill err">오류 ${errCount}건</span>
     <span class="pill">우신기술사업부 ${techCount}건</span>
+    ${deletedIdx.length ? `<span class="pill">삭제 ${deletedIdx.length}건</span>` : ''}
   `;
+
+  // 삭제 목록 렌더링
+  const dtbody = document.getElementById('deletedTbody');
+  dtbody.innerHTML = '';
+  deletedIdx.forEach(idx=>{
+    const g = GROUPS[idx];
+    const f = getFinal(g);
+    const prods = [];
+    if(g.hasTV) prods.push('<span class="badge tv">TV</span>');
+    if(g.hasInet) prods.push('<span class="badge inet">인터넷</span>');
+    if(g.isTechDept) prods.push('<span class="badge tech">우신기술사업부</span>');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="checkbox-cell"><input type="checkbox" data-role="restore" data-idx="${idx}" ${g.restoreChecked?'checked':''}></td>
+      <td>${g.고객명}</td>
+      <td>${g.유치자}</td>
+      <td>${stripTeamPrefix(g.협력점)}</td>
+      <td>${g.개통일}</td>
+      <td>${prods.join(' ')}</td>
+      <td>${(f.monthly*f.months).toLocaleString()}원</td>
+      <td>${errorBadges(g).map(b=>`<span class="badge ${b[0]}">${b[1]}</span>`).join('')}</td>
+    `;
+    dtbody.appendChild(tr);
+  });
+  dtbody.querySelectorAll('input[data-role=restore]').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      GROUPS[Number(e.target.dataset.idx)].restoreChecked = e.target.checked;
+      updateActionButtons();
+    });
+  });
+  document.getElementById('deletedCount').textContent = deletedIdx.length;
+  document.getElementById('deletedCard').classList.toggle('hidden', deletedIdx.length===0);
+  updateActionButtons();
 
   tbody.querySelectorAll('input[data-role]').forEach(inp=>{
     inp.addEventListener('change', e=>{
@@ -508,7 +579,7 @@ function render(){
       const v = e.target.value.trim();
       if(role==='tv') g.overrides.tvSaid = v;
       if(role==='inet') g.overrides.inetSaid = v;
-      if(role==='check') { g.checked = e.target.checked; return; }
+      if(role==='check') { g.checked = e.target.checked; updateActionButtons(); return; }
       if(role==='rawAmt'){ g.overrides.totalRaw = v; g.overrides.monthly=null; g.overrides.months=null; }
       if(role==='monthly') g.overrides.monthly = v;
       if(role==='months') g.overrides.months = v;
@@ -530,6 +601,47 @@ function render(){
   document.getElementById('tableCard').classList.remove('hidden');
   document.getElementById('exportCard').classList.remove('hidden');
 }
+
+// ---------- 선택 삭제 / 다시 추가 ----------
+function updateActionButtons(){
+  const active = activeGroups();
+  const deleted = GROUPS.filter(g=>g.deleted);
+  const nChecked = active.filter(g=>g.checked).length;
+  const nRestore = deleted.filter(g=>g.restoreChecked).length;
+  const delBtn = document.getElementById('btnDeleteChecked');
+  delBtn.disabled = nChecked===0;
+  delBtn.textContent = nChecked ? `선택 삭제 (${nChecked}건)` : '선택 삭제';
+  document.getElementById('checkedInfo').textContent = nChecked ? `${nChecked}건 선택됨` : '';
+  const resBtn = document.getElementById('btnRestore');
+  resBtn.disabled = nRestore===0;
+  resBtn.textContent = nRestore ? `선택 다시 추가 (${nRestore}건)` : '선택 다시 추가';
+  const checkAll = document.getElementById('checkAll');
+  checkAll.checked = active.length>0 && nChecked===active.length;
+  checkAll.indeterminate = nChecked>0 && nChecked<active.length;
+  const restoreAll = document.getElementById('restoreAll');
+  restoreAll.checked = deleted.length>0 && nRestore===deleted.length;
+  restoreAll.indeterminate = nRestore>0 && nRestore<deleted.length;
+}
+document.getElementById('checkAll').addEventListener('change', e=>{
+  activeGroups().forEach(g=> g.checked = e.target.checked);
+  render();
+});
+document.getElementById('restoreAll').addEventListener('change', e=>{
+  GROUPS.filter(g=>g.deleted).forEach(g=> g.restoreChecked = e.target.checked);
+  render();
+});
+document.getElementById('btnDeleteChecked').addEventListener('click', ()=>{
+  const targets = activeGroups().filter(g=>g.checked);
+  if(targets.length===0) return;
+  if(!confirm(`선택한 ${targets.length}건을 등록 대상 목록에서 삭제할까요?\n(아래 삭제 목록에서 다시 추가할 수 있습니다)`)) return;
+  targets.forEach(g=>{ g.deleted = true; g.checked = false; g.restoreChecked = false; });
+  render();
+});
+document.getElementById('btnRestore').addEventListener('click', ()=>{
+  const targets = GROUPS.filter(g=>g.deleted && g.restoreChecked);
+  targets.forEach(g=>{ g.deleted = false; g.restoreChecked = false; g.checked = false; });
+  render();
+});
 
 document.querySelectorAll('th.sortable').forEach(th=>{
   th.addEventListener('click', ()=>{
@@ -605,7 +717,7 @@ const DAOU_HEADERS = ['상태','구분','유치자(유발자)','유치부서(유
 
 function buildDaouRows(filterFn){
   const today = fmtDate(new Date());
-  return GROUPS.filter(filterFn).map(g=>{
+  return activeGroups().filter(filterFn).map(g=>{
     const f = getFinal(g);
     const totalInet = f.inetMonthly * f.months;
     const totalTV = f.tvMonthly * f.months;
@@ -627,7 +739,7 @@ function buildDaouRows(filterFn){
 
 document.getElementById('btnErrOnly').addEventListener('click', ()=>{
   const rows = [];
-  GROUPS.forEach(g=>{
+  activeGroups().forEach(g=>{
     const badges = errorBadges(g);
     if(badges.length===0) return;
     const f = getFinal(g);
@@ -670,7 +782,7 @@ function buildKtWorkbookAndDownload(title, headers, rows, filename){
 document.getElementById('btnKtTv').addEventListener('click', ()=>{
   const startMonth = nextMonthYYYYMM(new Date());
   const rows = [];
-  GROUPS.forEach(g=>{
+  activeGroups().forEach(g=>{
     const f = getFinal(g);
     if(f.tvMonthly>0){
       rows.push([rows.length+1, f.tvSaid || '오류(전산확인필요)', f.tvMonthly, '', '', startMonth, f.months]);
@@ -683,7 +795,7 @@ document.getElementById('btnKtTv').addEventListener('click', ()=>{
 document.getElementById('btnKtInet').addEventListener('click', ()=>{
   const startMonth = nextMonthYYYYMM(new Date());
   const rows = [];
-  GROUPS.forEach(g=>{
+  activeGroups().forEach(g=>{
     const f = getFinal(g);
     if(f.inetMonthly>0){
       rows.push([rows.length+1, f.inetSaid || '오류(확인필요)', f.inetMonthly, '', startMonth, f.months]);
