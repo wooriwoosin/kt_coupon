@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>워크라인 북마클릿 설치</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --border:#e2e5ea; --text:#1f2430; --muted:#6b7280;
+    --accent:#2f6fed; --accent-soft:#eaf1ff; --warn-bg:#fff6e5; --warn-text:#8a5b00; --warn-border:#f3dfa5;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:14px;line-height:1.6;}
+  header{background:var(--panel);border-bottom:1px solid var(--border);padding:16px 24px;}
+  header h1{font-size:17px;margin:0 0 2px;}
+  header p{margin:0;color:var(--muted);font-size:12px;}
+  header a{color:var(--accent);}
+  .wrap{max-width:860px;margin:0 auto;padding:20px 16px 60px;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:16px;}
+  .card h2{font-size:15px;margin:0 0 10px;}
+  ol{margin:0;padding-left:20px;} li{margin:4px 0;}
+  .bm{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;border-radius:8px;padding:12px 22px;font-weight:700;font-size:15px;cursor:grab;margin:8px 0;}
+  .bm.loading{background:#c8ccd4;pointer-events:none;}
+  .drop-hint{color:var(--muted);font-size:12px;}
+  .warn{background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-border);border-radius:8px;padding:10px 12px;font-size:13px;}
+  kbd{background:#f2f3f5;border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:0 5px;font-size:12px;}
+  .tag{display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:20px;padding:1px 10px;font-size:12px;font-weight:600;margin-right:6px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>워크라인 북마클릿 설치</h1>
+  <p>워크라인(workline.kr) 화면에서 데이터를 바로 가져오기 위한 북마크 버튼 · <a href="./">← 쿠폰 등록관리로 돌아가기</a></p>
+</header>
+
+<div class="wrap">
+
+  <div class="card">
+    <h2><span class="tag">1단계</span>진단 북마크 설치</h2>
+    <ol>
+      <li>북마크바가 안 보이면 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> 를 눌러 켜주세요.</li>
+      <li>아래 파란 버튼을 마우스로 <b>끌어서 북마크바에 놓으세요</b>. (클릭 X, 드래그 O)</li>
+    </ol>
+    <a class="bm loading" id="bmDiagnose" href="#">불러오는 중…</a>
+    <div class="drop-hint">이 버튼은 워크라인 화면에서 눌러야 동작해요. 여기서 누르면 아무 일도 안 일어나요.</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="tag">2단계</span>워크라인에서 실행</h2>
+    <ol>
+      <li>workline.kr 에 로그인 → 평소 <b>엑셀 다운로드 받던 개통 목록 화면</b>으로 이동</li>
+      <li>평소처럼 기간 등 조건 넣고 <b>조회까지</b> 해서 목록이 화면에 보이게 해주세요.</li>
+      <li>북마크바의 <b>「워크라인 진단」</b>을 클릭 → 결과 창이 뜨면 <b>「전체 복사」</b></li>
+      <li>Claude 대화창에 그대로 붙여넣기 해주세요.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>진단 결과에 담기는 것</h2>
+    <ul style="margin:0;padding-left:20px;">
+      <li>화면 주소, 표의 <b>컬럼 이름</b>과 행 수, 샘플 3줄 (숫자는 <code>#</code>, 고객명·연락처 등은 <code>○</code> 로 가림)</li>
+      <li>엑셀 다운로드 버튼이 내부적으로 어떤 주소/함수를 부르는지</li>
+      <li>화면이 사용하는 그리드(표) 종류, 데이터 요청 주소</li>
+    </ul>
+    <div class="warn" style="margin-top:10px;">
+      로그인 정보·비밀번호는 수집하지 않고, 어디로도 전송하지 않아요. 결과는 화면에만 표시되고, 붙여넣기는 직접 하시는 거예요.
+    </div>
+  </div>
+
+</div>
+
+<script>
+  /* 북마클릿 소스(js 파일)를 읽어 javascript: 링크로 변환 */
+  function installBookmarklet(linkId, src, label){
+    const a = document.getElementById(linkId);
+    fetch(src, {cache:'no-store'})
+      .then(r => { if(!r.ok) throw new Error(r.status); return r.text(); })
+      .then(code => {
+        code = code.replace(/^\s*\/\*[\s\S]*?\*\/\s*/, '');
+        a.href = 'javascript:' + encodeURIComponent(code);
+        a.textContent = label;
+        a.classList.remove('loading');
+        a.addEventListener('click', e => { e.preventDefault(); alert('클릭하지 말고, 북마크바로 끌어다 놓아주세요!\n(워크라인 화면에서 북마크를 눌러야 동작해요)'); });
+      })
+      .catch(err => { a.textContent = '불러오기 실패 — 새로고침 해주세요 (' + err.message + ')'; });
+  }
+  installBookmarklet('bmDiagnose', 'bookmarklets/diagnose.js', '워크라인 진단');
+</script>
+</body>
+</html>
